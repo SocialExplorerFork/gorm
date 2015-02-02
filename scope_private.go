@@ -487,7 +487,7 @@ func (scope *Scope) related(value interface{}, foreignKeys ...string) *Scope {
 	toScopeType := toScope.typeName()
 	scopeType := ""
 
-	for _, foreignKey := range append(foreignKeys, toScope.typeName()+"Id", scope.typeName()+"Id") {
+	for _, foreignKey := range append(foreignKeys, toScope.typeName()+"Id", scope.typeName()+"Id", toScope.typeName()+"ID", scope.typeName()+"ID") {
 		if keys := strings.Split(foreignKey, "."); len(keys) > 1 {
 			scopeType = keys[0]
 			foreignKey = keys[1]
