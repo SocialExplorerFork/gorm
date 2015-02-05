@@ -296,7 +296,7 @@ func (s *DB) RawFromTemplate(queryTemplate string, params map[string]string, val
 	// execute template param binding, ignore errors
 	_ = tmpl.Execute(&b, params)
 	// b.String() is the compiled query
-	return s.Raw(b.String(), values)
+	return s.Raw(b.String(), values...)
 }
 
 func (s *DB) Exec(sql string, values ...interface{}) *DB {
