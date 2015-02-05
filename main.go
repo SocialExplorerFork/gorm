@@ -1,11 +1,13 @@
 package gorm
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -284,6 +286,17 @@ func (s *DB) Delete(value interface{}, where ...interface{}) *DB {
 
 func (s *DB) Raw(sql string, values ...interface{}) *DB {
 	return s.clone().search.raw(true).where(sql, values...).db
+}
+
+func (s *DB) RawFromTemplate(queryTemplate string, params map[string]string, values ...interface{}) *DB {
+	// create template, ignore errors
+	tmpl, _ := template.New("rawQuery").Parse(queryTemplate)
+	// temporary storage
+	var b bytes.Buffer
+	// execute template param binding, ignore errors
+	_ = tmpl.Execute(&b, params)
+	// b.String() is the compiled query
+	return s.Raw(b.String(), values)
 }
 
 func (s *DB) Exec(sql string, values ...interface{}) *DB {
