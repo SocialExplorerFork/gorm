@@ -307,6 +307,17 @@ func (s *DB) Exec(sql string, values ...interface{}) *DB {
 	return scope.Exec().db
 }
 
+func (s *DB) ExecFromTemplate(queryTemplate string, params map[string]string, values ...interface{}) *DB {
+	// create template, ignore errors
+	tmpl, _ := template.New("rawQuery").Parse(queryTemplate)
+	// temporary storage
+	var b bytes.Buffer
+	// execute template param binding, ignore errors
+	_ = tmpl.Execute(&b, params)
+	// b.String() is the compiled query
+	return s.Exec(b.String(), values...)
+}
+
 func (s *DB) Model(value interface{}) *DB {
 	c := s.clone()
 	c.Value = value
