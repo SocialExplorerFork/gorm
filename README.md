@@ -6,42 +6,19 @@ The fantastic ORM library for Golang, aims to be developer friendly.
 
 ## Overview
 
+* Full-Featured ORM (almost)
 * Chainable API
-* Embedded Structs
-* Relations
-* Callbacks (before/after create/save/update/delete/find)
-* Soft Deletes
 * Auto Migrations
+* Relations (Has One, Has Many, Belongs To, Many To Many, [Polymorphism](#polymorphism))
+* Callbacks (Before/After Create/Save/Update/Delete/Find)
+* Preloading (eager loading)
 * Transactions
+* Embed Anonymous Struct
+* Soft Deletes
 * Customizable Logger
 * Iteration Support via [Rows](#row--rows)
-* Scopes
-* sql.Scanner support
-* Polymorphism
 * Every feature comes with tests
-* Convention Over Configuration
 * Developer Friendly
-
-## Conventions
-
-* Table name is the plural of struct name's snake case, you can disable pluralization with `db.SingularTable(true)`, or [Specifying The Table Name For A Struct Permanently With TableName](#specifying-the-table-name-for-a-struct-permanently-with-tablename)
-
-```go
-// E.g finding an existing User
-var user User
-// Gorm will know to use table "users" ("user" if pluralisation has been disabled) for all operations.
-db.First(&user)
-
-// creating a new User
-db.Save(&User{Name: "xxx"}) // table "users"
-```
-
-* Column name is the snake case of field's name
-* Use `Id` field as primary key
-* Use tag `sql` to change field's property, change the tag name with `db.SetTagIdentifier(new_name)`
-* Use `CreatedAt` to store record's created time if field exists
-* Use `UpdatedAt` to store record's updated time if field exists
-* Use `DeletedAt` to store record's deleted time if field exists [Soft Delete](#soft-delete)
 
 # Getting Started
 
@@ -55,47 +32,61 @@ go get -u github.com/jinzhu/gorm
 
 ```go
 type User struct {
-	Id           int64
+	ID           int
 	Birthday     time.Time
-	Age          int64
-	Name         string  `sql:"size:255"`
+	Age          int
+	Name         string  `sql:"size:255"` // Default size for string is 255, you could reset it with this tag
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    time.Time
 
 	Emails            []Email         // One-To-Many relationship (has many)
 	BillingAddress    Address         // One-To-One relationship (has one)
-	BillingAddressId  sql.NullInt64   // Foreign key of BillingAddress
+	BillingAddressID  sql.NullInt64   // Foreign key of BillingAddress
 	ShippingAddress   Address         // One-To-One relationship (has one)
-	ShippingAddressId int64           // Foreign key of ShippingAddress
-	IgnoreMe          int64 `sql:"-"` // Ignore this field
+	ShippingAddressID int             // Foreign key of ShippingAddress
+	IgnoreMe          int `sql:"-"`   // Ignore this field
 	Languages         []Language `gorm:"many2many:user_languages;"` // Many-To-Many relationship, 'user_languages' is join table
 }
 
 type Email struct {
-	Id         int64
-	UserId     int64   // Foreign key for User (belongs to)
-	Email      string  `sql:"type:varchar(100);"` // Set field's type
+	ID      int
+	UserID  int     `sql:"index"` // Foreign key (belongs to), tag `index` will create index for this field when using AutoMigrate
+	Email   string  `sql:"type:varchar(100);unique_index"` // Set field's sql type, tag `unique_index` will create unique index
 	Subscribed bool
 }
 
 type Address struct {
-	Id       int64
+	ID       int
 	Address1 string         `sql:"not null;unique"` // Set field as not nullable and unique
 	Address2 string         `sql:"type:varchar(100);unique"`
-	Post     sql.NullString `sql:not null`
+	Post     sql.NullString `sql:"not null"`
 }
 
 type Language struct {
-	Id   int64
-	Name string
+	ID   int
+	Name string `sql:"index:idx_name_code"` // Create index with name, and will create combined index if find other fields defined same name
+	Code string `sql:"index:idx_name_code"` // `unique_index` also works
 }
 ```
+
+## Conventions
+
+* Table name is the plural of struct name's snake case, you can disable pluralization with `db.SingularTable(true)`, or [Specifying The Table Name For A Struct Permanently With TableName](#specifying-the-table-name-for-a-struct-permanently-with-tablename)
+
+```go
+type User struct{} // struct User's database table name is "users" by default, will be "user" if you disabled pluralisation
+```
+
+* Column name is the snake case of field's name
+* Use `ID` field as primary key
+* Use `CreatedAt` to store record's created time if field exists
+* Use `UpdatedAt` to store record's updated time if field exists
+* Use `DeletedAt` to store record's deleted time if field exists [Soft Delete](#soft-delete)
 
 ## Initialize Database
 
 ```go
-
 import (
 	"github.com/jinzhu/gorm"
 	_ "github.com/lib/pq"
@@ -104,7 +95,7 @@ import (
 )
 
 db, err := gorm.Open("postgres", "user=gorm dbname=gorm sslmode=disable")
-// db, err := gorm.Open("mysql", "user:password@/dbname?charset=utf8&parseTime=True")
+// db, err := gorm.Open("mysql", "user:password@/dbname?charset=utf8&parseTime=True&loc=Local")
 // db, err := gorm.Open("sqlite3", "/tmp/gorm.db")
 
 // You can also use an existing database connection handle
@@ -132,31 +123,13 @@ db.CreateTable(&User{})
 // Drop table
 db.DropTable(&User{})
 
-// Drop table if exists
-db.DropTableIfExists(&User{})
-
 // Automating Migration
 db.AutoMigrate(&User{})
 db.AutoMigrate(&User{}, &Product{}, &Order{})
-
 // Feel free to change your struct, AutoMigrate will keep your database up-to-date.
-// Fyi, AutoMigrate will only *add new columns*, it won't update column's type or delete unused columns, to make sure your data is safe.
+// AutoMigrate will ONLY add *new columns* and *new indexes*,
+// WON'T update current column's type or delete unused columns, to protect your data.
 // If the table is not existing, AutoMigrate will create the table automatically.
-
-// Add index
-db.Model(&User{}).AddIndex("idx_user_name", "name")
-
-// Multiple column index
-db.Model(&User{}).AddIndex("idx_user_name_age", "name", "age")
-
-// Add unique index
-db.Model(&User{}).AddUniqueIndex("idx_user_name", "name")
-
-// Multiple column unique index
-db.Model(&User{}).AddUniqueIndex("idx_user_name_age", "name", "age")
-
-// Remove index
-db.Model(&User{}).RemoveIndex("idx_user_name")
 ```
 
 # Basic CRUD
@@ -166,18 +139,13 @@ db.Model(&User{}).RemoveIndex("idx_user_name")
 ```go
 user := User{Name: "Jinzhu", Age: 18, Birthday: time.Now()}
 
-// returns true if record hasn’t been saved (primary key `Id` is blank)
-db.NewRecord(user) // => true
+db.NewRecord(user) // => returns `true` if primary key is blank
 
 db.Create(&user)
 
-// will return false after `user` created
-db.NewRecord(user) // => false
+db.NewRecord(user) // => return `false` after `user` created
 
-// You could use `Save` to create record also if its primary key is null
-db.Save(&user)
-
-// Associations will be saved automatically when insert the record
+// Associations will be inserted automatically when save the record
 user := User{
 	Name:            "jinzhu",
 	BillingAddress:  Address{Address1: "Billing Address - Address 1"},
@@ -200,7 +168,7 @@ db.Create(&user)
 //// COMMIT;
 ```
 
-Refer [Associations](#associations) for how to work with associations
+Refer [Associations](#associations) for more details
 
 ## Query
 
@@ -335,6 +303,28 @@ db.Where("name <> ?","jinzhu").Where("age >= ? and role <> ?",20,"admin").Find(&
 db.Where("role = ?", "admin").Or("role = ?", "super_admin").Not("name = ?", "jinzhu").Find(&users)
 ```
 
+### Preloading (Eager loading)
+
+```go
+db.Preload("Orders").Find(&users)
+//// SELECT * FROM users;
+//// SELECT * FROM orders WHERE user_id IN (1,2,3,4);
+
+db.Preload("Orders", "state NOT IN (?)", "cancelled").Find(&users)
+//// SELECT * FROM users;
+//// SELECT * FROM orders WHERE user_id IN (1,2,3,4) AND state NOT IN ('cancelled');
+
+db.Where("state = ?", "active").Preload("Orders", "state NOT IN (?)", "cancelled").Find(&users)
+//// SELECT * FROM users WHERE state = 'active';
+//// SELECT * FROM orders WHERE user_id IN (1,2) AND state NOT IN ('cancelled');
+
+db.Preload("Orders").Preload("Profile").Preload("Role").Find(&users)
+//// SELECT * FROM users;
+//// SELECT * FROM orders WHERE user_id IN (1,2,3,4); // has many
+//// SELECT * FROM profiles WHERE user_id IN (1,2,3,4); // has one
+//// SELECT * FROM roles WHERE id IN (4,5,6); // belongs to
+```
+
 ## Update
 
 ```go
@@ -345,9 +335,15 @@ user.Age = 100
 db.Save(&user)
 //// UPDATE users SET name='jinzhu 2', age=100, updated_at = '2013-11-17 21:34:10' WHERE id=111;
 
+db.Where("active = ?", true).Save(&user)
+//// UPDATE users SET name='jinzhu 2', age=100, updated_at = '2013-11-17 21:34:10' WHERE id=111 AND active = true;
+
 // Update an attribute if it is changed
 db.Model(&user).Update("name", "hello")
 //// UPDATE users SET name='hello', updated_at = '2013-11-17 21:34:10' WHERE id=111;
+
+db.Model(&user).Where("active = ?", true).Update("name", "hello")
+//// UPDATE users SET name='hello', updated_at = '2013-11-17 21:34:10' WHERE id=111 AND active = true;
 
 db.First(&user, 111).Update("name", "hello")
 //// SELECT * FROM users LIMIT 1;
@@ -384,6 +380,22 @@ db.Model(User{}).Updates(User{Name: "hello", Age: 18})
 // You may would like to know how many records updated when do batch updates
 // You could get it with `RowsAffected`
 db.Model(User{}).Updates(User{Name: "hello", Age: 18}).RowsAffected
+```
+
+### Update with SQL Expression
+
+```go
+DB.Model(&product).Update("price", gorm.Expr("price * ? + ?", 2, 100))
+//// UPDATE "products" SET "code" = 'L1212', "price" = price * '2' + '100', "updated_at" = '2013-11-17 21:34:10' WHERE "id" = '2';
+
+DB.Model(&product).Updates(map[string]interface{}{"price": gorm.Expr("price * ? + ?", 2, 100)})
+//// UPDATE "products" SET "code" = 'L1212', "price" = price * '2' + '100', "updated_at" = '2013-11-17 21:34:10' WHERE "id" = '2';
+
+DB.Model(&product).UpdateColumn("quantity", gorm.Expr("quantity - ?", 1))
+//// UPDATE "products" SET "quantity" = quantity - 1 WHERE "id" = '2';
+
+DB.Model(&product).Where("quantity > 1").UpdateColumn("quantity", gorm.Expr("quantity - ?", 1))
+//// UPDATE "products" SET "quantity" = quantity - 1 WHERE "id" = '2' AND quantity > 1;
 ```
 
 ## Delete
@@ -1047,6 +1059,32 @@ INSERT INTO animals("age") values('99');
 
 The same thing occurs in update statements.
 
+## Database Indexes & Foreign Key
+
+```go
+// Add foreign key
+// 1st param : foreignkey field
+// 2nd param : destination table(id)
+// 3rd param : ONDELETE
+// 4th param : ONUPDATE
+db.Model(&User{}).AddForeignKey("user_id", "destination_table(id)", "CASCADE", "RESTRICT")
+
+// Add index
+db.Model(&User{}).AddIndex("idx_user_name", "name")
+
+// Multiple column index
+db.Model(&User{}).AddIndex("idx_user_name_age", "name", "age")
+
+// Add unique index
+db.Model(&User{}).AddUniqueIndex("idx_user_name", "name")
+
+// Multiple column unique index
+db.Model(&User{}).AddUniqueIndex("idx_user_name_age", "name", "age")
+
+// Remove index
+db.Model(&User{}).RemoveIndex("idx_user_name")
+```
+
 ## More examples with query chain
 
 ```go
@@ -1087,13 +1125,12 @@ db.Where("email = ?", "x@example.org").Attrs(User{RegisteredIp: "111.111.111.111
 ```
 
 ## TODO
-* db.RegisterFuncation("Search", func() {})
-  db.Model(&[]User{}).Limit(10).Do("Search", "search func's argument")
-  db.Mode(&User{}).Do("EditForm").Get("edit_form_html")
-  DefaultTimeZone, R/W Splitting, Validation
+* db.Select("Languages", "Name").Update(&user)
+  db.Omit("Languages").Update(&user)
+* Auto migrate indexes
 * Github Pages
-* Includes
 * AlertColumn, DropColumn
+* R/W Splitting, Validation
 
 # Author
 

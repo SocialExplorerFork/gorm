@@ -23,7 +23,7 @@ func TestCustomizeColumn(t *testing.T) {
 	DB.DropTable(&CustomizeColumn{})
 	DB.AutoMigrate(&CustomizeColumn{})
 
-	scope := DB.Model("").NewScope(&CustomizeColumn{})
+	scope := DB.NewScope(&CustomizeColumn{})
 	if !scope.Dialect().HasColumn(scope, scope.TableName(), col) {
 		t.Errorf("CustomizeColumn should have column %s", col)
 	}
@@ -59,5 +59,7 @@ func TestCustomizeColumn(t *testing.T) {
 
 func TestCustomColumnAndIgnoredFieldClash(t *testing.T) {
 	DB.DropTable(&CustomColumnAndIgnoredFieldClash{})
-	DB.AutoMigrate(&CustomColumnAndIgnoredFieldClash{})
+	if err := DB.AutoMigrate(&CustomColumnAndIgnoredFieldClash{}).Error; err != nil {
+		t.Errorf("Should not raise error: %s", err)
+	}
 }

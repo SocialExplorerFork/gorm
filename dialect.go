@@ -3,10 +3,7 @@ package gorm
 import (
 	"fmt"
 	"reflect"
-	"time"
 )
-
-var timeType = reflect.TypeOf(time.Time{})
 
 type Dialect interface {
 	BinVar(i int) string
@@ -19,6 +16,7 @@ type Dialect interface {
 	Quote(key string) string
 	HasTable(scope *Scope, tableName string) bool
 	HasColumn(scope *Scope, tableName string, columnName string) bool
+	HasIndex(scope *Scope, tableName string, indexName string) bool
 	RemoveIndex(scope *Scope, indexName string)
 }
 
