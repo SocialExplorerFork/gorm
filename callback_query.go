@@ -40,15 +40,18 @@ func Query(scope *Scope) {
 	scope.prepareQuerySql()
 
 	if !scope.HasError() {
-		rows, err := scope.DB().Query(scope.Sql, scope.SqlVars...)
+		rows, err := scope.SqlDB().Query(scope.Sql, scope.SqlVars...)
+		scope.db.RowsAffected = 0
 
 		if scope.Err(err) != nil {
 			return
 		}
-
 		defer rows.Close()
+
 		columns, _ := rows.Columns()
 		for rows.Next() {
+			scope.db.RowsAffected++
+
 			anyRecordFound = true
 			elem := dest
 			if isSlice {
@@ -100,10 +103,11 @@ func Query(scope *Scope) {
 }
 
 func AfterQuery(scope *Scope) {
-	scope.CallMethod("AfterFind")
+	scope.CallMethodWithErrorCheck("AfterFind")
 }
 
 func init() {
 	DefaultCallback.Query().Register("gorm:query", Query)
 	DefaultCallback.Query().Register("gorm:after_query", AfterQuery)
+	DefaultCallback.Query().Register("gorm:preload", Preload)
 }
