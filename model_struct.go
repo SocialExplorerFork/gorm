@@ -12,10 +12,10 @@ import (
 )
 
 type ModelStruct struct {
-	PrimaryKeyField *StructField
-	StructFields    []*StructField
-	ModelType       reflect.Type
-	TableName       string
+	PrimaryFields []*StructField
+	StructFields  []*StructField
+	ModelType     reflect.Type
+	TableName     string
 }
 
 type StructField struct {
@@ -27,7 +27,6 @@ type StructField struct {
 	IsIgnored       bool
 	IsScanner       bool
 	HasDefaultValue bool
-	SqlTag          string
 	Tag             reflect.StructTag
 	Struct          reflect.StructField
 	IsForeignKey    bool
@@ -44,7 +43,6 @@ func (structField *StructField) clone() *StructField {
 		IsIgnored:       structField.IsIgnored,
 		IsScanner:       structField.IsScanner,
 		HasDefaultValue: structField.HasDefaultValue,
-		SqlTag:          structField.SqlTag,
 		Tag:             structField.Tag,
 		Struct:          structField.Struct,
 		IsForeignKey:    structField.IsForeignKey,
@@ -131,7 +129,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 				gormSettings := parseTagSetting(field.Tag.Get("gorm"))
 				if _, ok := gormSettings["PRIMARY_KEY"]; ok {
 					field.IsPrimaryKey = true
-					modelStruct.PrimaryKeyField = field
+					modelStruct.PrimaryFields = append(modelStruct.PrimaryFields, field)
 				}
 
 				if _, ok := sqlSettings["DEFAULT"]; ok {
@@ -240,7 +238,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 							toField.Names = append([]string{fieldStruct.Name}, toField.Names...)
 							modelStruct.StructFields = append(modelStruct.StructFields, toField)
 							if toField.IsPrimaryKey {
-								modelStruct.PrimaryKeyField = toField
+								modelStruct.PrimaryFields = append(modelStruct.PrimaryFields, toField)
 							}
 						}
 						continue
@@ -277,13 +275,9 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 			}
 
 			if field.IsNormal {
-				if modelStruct.PrimaryKeyField == nil && field.DBName == "id" {
+				if len(modelStruct.PrimaryFields) == 0 && field.DBName == "id" {
 					field.IsPrimaryKey = true
-					modelStruct.PrimaryKeyField = field
-				}
-
-				if scope.db != nil {
-					scope.generateSqlTag(field)
+					modelStruct.PrimaryFields = append(modelStruct.PrimaryFields, field)
 				}
 			}
 		}
@@ -301,7 +295,7 @@ func (scope *Scope) GetStructFields() (fields []*StructField) {
 	return scope.GetModelStruct().StructFields
 }
 
-func (scope *Scope) generateSqlTag(field *StructField) {
+func (scope *Scope) generateSqlTag(field *StructField) string {
 	var sqlType string
 	structType := field.Struct.Type
 	if structType.Kind() == reflect.Ptr {
@@ -337,17 +331,18 @@ func (scope *Scope) generateSqlTag(field *StructField) {
 			size, _ = strconv.Atoi(value)
 		}
 
+		_, autoIncrease := sqlSettings["AUTO_INCREMENT"]
 		if field.IsPrimaryKey {
-			sqlType = scope.Dialect().PrimaryKeyTag(reflectValue, size)
-		} else {
-			sqlType = scope.Dialect().SqlTag(reflectValue, size)
+			autoIncrease = true
 		}
+
+		sqlType = scope.Dialect().SqlTag(reflectValue, size, autoIncrease)
 	}
 
 	if strings.TrimSpace(additionalType) == "" {
-		field.SqlTag = sqlType
+		return sqlType
 	} else {
-		field.SqlTag = fmt.Sprintf("%v %v", sqlType, additionalType)
+		return fmt.Sprintf("%v %v", sqlType, additionalType)
 	}
 }
 
